@@ -110,8 +110,6 @@
 
     function startLocationTracking() {
     if ("geolocation" in navigator) {
-        alert("Activa la localización en tu navegador para ver tu ubicación.");
-        
         navigator.geolocation.getCurrentPosition(onLocationFound, function(error) {
             // More user-friendly error message
             if (error.code === error.PERMISSION_DENIED) {
