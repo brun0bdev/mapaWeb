@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Cáceres - Números de Portales</title>
+    
+    <!-- Incluir Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+          integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+          crossorigin=""/>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        .portal-marker {
+            background-color: rgba(255, 0, 0, 0.6);
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        .loading-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        .zoom-message {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            font-weight: bold;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>   
+    <div id="zoom-message" class="zoom-message"></div>
+
+<script>
+    var userLocationMarker = null;
+    var userLocationCircle = null;
+
+    function onLocationFound(position) {
+        var lat = position.coords.latitude;
+        var lng = position.coords.longitude;
+        var accuracy = position.coords.accuracy;
+
+        if (!userLocationMarker) {
+            userLocationMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'user-location-marker',
+                    html: '<div class="pulse"></div>',
+                    iconSize: [20, 20]
+                })
+            }).addTo(map);
+
+            userLocationCircle = L.circle([lat, lng], {
+                radius: accuracy/2,
+                weight: 1,
+                color: 'blue',
+                fillColor: 'blue',
+                fillOpacity: 0.15
+            }).addTo(map);
+            
+            map.setView([lat, lng], 16);
+        } else {
+            userLocationMarker.setLatLng([lat, lng]);
+            userLocationCircle.setLatLng([lat, lng]);
+            userLocationCircle.setRadius(accuracy/2);
+        }
+    }
+
+    function onLocationError(e) {
+        alert("Error accessing location: " + e.message);
+    }
+
+    var style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = `
+        .user-location-marker {
+            background: transparent;
+            border: none;
+        }
+        .pulse {
+            display: block;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: rgba(52, 106, 255, 1);
+            box-shadow: 0 0 0 rgba(52, 106, 255, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(52, 106, 255, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(52, 106, 255, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(52, 106, 255, 0);
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    function startLocationTracking() {
+    if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(onLocationFound, function(error) {
+            // More user-friendly error message
+            if (error.code === error.PERMISSION_DENIED) {
+                alert("El acceso a la ubicación fue denegado. Por favor, activa la localización en tu navegador.");
+            } else {
+                alert("Error location: " + error.message);
+            }
+        }, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
+        
+        navigator.geolocation.watchPosition(onLocationFound, onLocationError, {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        });
+    } else {
+        alert("Geolocation is not supported by your browser.");
+    }
+}
+
+function addLocationButton() {
+    var locationButton = L.control({position: 'topright'});
+    locationButton.onAdd = function() {
+        var div = L.DomUtil.create('div', 'location-button');
+        div.innerHTML = '<button title="Mi localización" aria-label="Mi localización"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>MI LOCALIZACIÓN</button>';
+        div.style.cssText = 'background: blue; padding: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.8); margin: 10px; z-index: 1000;';
+        div.querySelector('button').style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; color: white; font-weight: bold; width: auto; height: 40px; border: none; background: none; cursor: pointer; border-radius: 2px; font-size: 14px;';
+        div.querySelector('svg').style.cssText = 'width: 22px; height: 22px; fill: white;';
+        
+        div.onclick = function() {
+            startLocationTracking();
+        };
+        return div;
+    };
+    locationButton.addTo(map);
+}
+</script> 
+    <!-- Incluir Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+            integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+            crossorigin=""></script>
+    
+    <script>
+        // Inicializar el mapa centrado en Cáceres
+        const map = L.map('map').setView([39.4753, -6.3724], 15);
+        
+        // Añadir la capa base de OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 22,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Añadir controles de escala
+        L.control.scale().addTo(map);
+
+        // Crear un grupo para los marcadores de portal
+        const portalMarkersGroup = L.layerGroup().addTo(map);
+        
+        // Crear indicador de carga
+        const loadingIndicator = L.DomUtil.create('div', 'loading-indicator');
+        loadingIndicator.innerHTML = 'Cargando portales...';
+        document.body.appendChild(loadingIndicator);
+        
+        // Obtener referencia al mensaje de zoom
+        const zoomMessage = document.getElementById('zoom-message');
+
+        // Almacén de todos los portales cargados
+        let allPortalData = [];
+        let isDataLoaded = false;
+
+        // Función para mostrar/ocultar indicador de carga
+        function showLoading(show) {
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+        
+        // Función para mostrar/ocultar mensaje de zoom
+        function updateZoomMessage(zoomLevel) {
+            if (zoomLevel >= 19) {
+                zoomMessage.style.opacity = '0';
+            } else {
+                zoomMessage.style.opacity = '1';
+            }
+        }
+
+        // Función para procesar los datos CSV
+        function processCSV(csv) {
+            // Parsear el CSV
+            const lines = csv.split('\n');
+            let hasHeaders = false;
+            
+            // Verificar si la primera línea parece tener encabezados
+            const firstLine = lines[0].toLowerCase();
+            if (firstLine.includes('latitud') || firstLine.includes('latitude') || 
+                firstLine.includes('longitud') || firstLine.includes('longitude')) {
+                hasHeaders = true;
+            }
+            
+            // Determinar desde qué línea empezar a procesar (omitir encabezados si existen)
+            const startLine = hasHeaders ? 1 : 0;
+            
+            // Procesar y almacenar todos los datos de portales
+            allPortalData = [];
+            
+            for (let i = startLine; i < lines.length; i++) {
+                if (!lines[i].trim()) continue; // Saltar líneas vacías
+                
+                const fields = lines[i].split(',').map(field => field.trim());
+                if (fields.length < 3) continue; // Necesitamos al menos 3 campos
+                
+                // IMPORTANTE: Formato asumido - longitud, latitud, housenumber
+                const lon = parseFloat(fields[0]);
+                const lat = parseFloat(fields[1]);
+                const housenumber = fields[2].toString();
+                
+                if (isNaN(lat) || isNaN(lon)) continue; // Saltar líneas con coordenadas no válidas
+                
+                // Almacenar para uso posterior
+                allPortalData.push({
+                    lat: lat,
+                    lng: lon,
+                    housenumber: housenumber
+                });
+            }
+            
+            // Marcar datos como cargados
+            isDataLoaded = true;
+            
+            // Intentar mostrar los marcadores si el nivel de zoom es adecuado
+            updateMarkersForCurrentView();
+            
+            console.log(`Procesados ${allPortalData.length} portales en total`);
+        }
+        
+        // Función para actualizar marcadores según el área visible y nivel de zoom
+        function updateMarkersForCurrentView() {
+            // Limpiar marcadores existentes
+            portalMarkersGroup.clearLayers();
+            
+            // Salir si los datos no están cargados
+            if (!isDataLoaded) return;
+            
+            // Verificar el nivel de zoom
+            const currentZoom = map.getZoom();
+            updateZoomMessage(currentZoom);
+            
+            // No mostrar portales si el zoom es menor a 17
+            if (currentZoom < 19) {
+                return;
+            }
+            
+            // Obtener límites del mapa visible
+            const bounds = map.getBounds();
+            let markersShown = 0;
+            showLoading(true);
+            
+            // Añadir solo los portales visibles en el área actual
+            for (const portal of allPortalData) {
+                if (bounds.contains([portal.lat, portal.lng])) {
+                    // Crear un marcador personalizado para el número de portal
+                    const portalIcon = L.divIcon({
+                        className: 'portal-marker',
+                        html: portal.housenumber,
+                        iconSize: [20, 20]
+                    });
+                    
+                    // Añadir el marcador al grupo
+                    const marker = L.marker([portal.lat, portal.lng], {
+                        icon: portalIcon,
+                        title: `Portal ${portal.housenumber}`
+                    }).addTo(portalMarkersGroup);
+                    
+                    // Añadir popup básico con número
+                    marker.bindPopup(`<b>Portal ${portal.housenumber}</b>`);
+                    
+                    markersShown++;
+                }
+            }
+            
+            showLoading(false);
+            console.log(`Mostrando ${markersShown} portales en el área visible`);
+        }
+        
+        // Datos CSV de ejemplo con formato longitud,latitud,numero
+        const datosEjemplo = ``;
+        
+        // Función para cargar los datos desde una URL
+        function cargarDatosDesdeURL(url) {
+            showLoading(true);
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Error al cargar el archivo CSV');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    processCSV(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Usar los datos de ejemplo en caso de error
+                    console.log('Usando datos de ejemplo...');
+                    processCSV(datosEjemplo);
+                })
+                .finally(() => {
+                    showLoading(false);
+                });
+        }
+
+        // Eventos de mapa para actualizar marcadores
+        map.on('zoomend', updateMarkersForCurrentView);
+        map.on('moveend', updateMarkersForCurrentView);
+
+        // Iniciar carga de datos al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            // Actualizar mensaje de zoom inicial
+            updateZoomMessage(map.getZoom());
+            
+            // Cargar datos
+            showLoading(true);
+            cargarDatosDesdeURL('nuevosPortales.csv');
+        });
+        document.addEventListener('DOMContentLoaded', addLocationButton);
+    </script>
+</body>
+</html>
