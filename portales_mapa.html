@@ -73,42 +73,120 @@
 
 <script>
     var userLocationMarker = null;
-    var userLocationCircle = null;
+var userLocationCircle = null;
+var watchId = null;
+var isLocationActive = false;
 
-    function onLocationFound(position) {
-        var lat = position.coords.latitude;
-        var lng = position.coords.longitude;
-        var accuracy = position.coords.accuracy;
+function onLocationFound(position) {
+    var lat = position.coords.latitude;
+    var lng = position.coords.longitude;
+    var accuracy = position.coords.accuracy;
 
-        if (!userLocationMarker) {
-            userLocationMarker = L.marker([lat, lng], {
-                icon: L.divIcon({
-                    className: 'user-location-marker',
-                    html: '<div class="pulse"></div>',
-                    iconSize: [20, 20]
-                })
-            }).addTo(map);
+    if (!userLocationMarker) {
+        userLocationMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'user-location-marker',
+                html: '<div class="pulse"></div>',
+                iconSize: [20, 20]
+            })
+        }).addTo(map);
 
-            userLocationCircle = L.circle([lat, lng], {
-                radius: accuracy/2,
-                weight: 1,
-                color: 'blue',
-                fillColor: 'blue',
-                fillOpacity: 0.15
-            }).addTo(map);
-            
-            map.setView([lat, lng], 16);
-        } else {
-            userLocationMarker.setLatLng([lat, lng]);
-            userLocationCircle.setLatLng([lat, lng]);
-            userLocationCircle.setRadius(accuracy/2);
-        }
+        userLocationCircle = L.circle([lat, lng], {
+            radius: accuracy/2,
+            weight: 1,
+            color: 'blue',
+            fillColor: 'blue',
+            fillOpacity: 0.15
+        }).addTo(map);
+        
+        map.setView([lat, lng], 16);
+    } else {
+        userLocationMarker.setLatLng([lat, lng]);
+        userLocationCircle.setLatLng([lat, lng]);
+        userLocationCircle.setRadius(accuracy/2);
     }
+    
+    isLocationActive = true;
+    showLoading(false);
+}
 
-    function onLocationError(e) {
-        alert("Error accessing location: " + e.message);
+function onLocationError(e) {
+    alert("Error accessing location: " + e.message);
+    isLocationActive = false;
+    showLoading(false);
+    
+    // Limpiar el watchId para poder intentar de nuevo
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
     }
+}
 
+function startLocationTracking() {
+    // Si ya tenemos la ubicación, simplemente centrar el mapa
+    if (isLocationActive && userLocationMarker) {
+        map.setView(userLocationMarker.getLatLng(), 16);
+        return;
+    }
+    
+    showLoading(true);
+    
+    // Limpiar cualquier watch anterior
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+    }
+    
+    if ("geolocation" in navigator) {
+        // Primera obtención de posición
+        navigator.geolocation.getCurrentPosition(
+            onLocationFound, 
+            function(error) {
+                if (error.code === error.PERMISSION_DENIED) {
+                    alert("El acceso a la ubicación fue denegado. Por favor, activa la localización en tu navegador.");
+                } else {
+                    alert("Error al obtener ubicación: " + error.message);
+                }
+                showLoading(false);
+            }, 
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 0
+            }
+        );
+        
+        // Seguimiento continuo
+        watchId = navigator.geolocation.watchPosition(
+            onLocationFound, 
+            onLocationError, 
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 5000
+            }
+        );
+    } else {
+        alert("La geolocalización no es compatible con tu navegador.");
+        showLoading(false);
+    }
+}
+
+function addLocationButton() {
+    var locationButton = L.control({position: 'topright'});
+    locationButton.onAdd = function() {
+        var div = L.DomUtil.create('div', 'location-button');
+        div.innerHTML = '<button title="Mi localización" aria-label="Mi localización"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>MI LOCALIZACIÓN</button>';
+        div.style.cssText = 'background: blue; padding: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.8); margin: 10px; z-index: 1000;';
+        div.querySelector('button').style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; color: white; font-weight: bold; width: auto; height: 40px; border: none; background: none; cursor: pointer; border-radius: 2px; font-size: 14px;';
+        div.querySelector('svg').style.cssText = 'width: 22px; height: 22px; fill: white;';
+        
+        div.onclick = function() {
+            startLocationTracking();
+        };
+        return div;
+    };
+    locationButton.addTo(map);
+}
     var style = document.createElement('style');
     style.type = 'text/css';
     style.innerHTML = `
@@ -138,48 +216,6 @@
         }
     `;
     document.head.appendChild(style);
-
-    function startLocationTracking() {
-    if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(onLocationFound, function(error) {
-            // More user-friendly error message
-            if (error.code === error.PERMISSION_DENIED) {
-                alert("El acceso a la ubicación fue denegado. Por favor, activa la localización en tu navegador.");
-            } else {
-                alert("Error location: " + error.message);
-            }
-        }, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        });
-        
-        navigator.geolocation.watchPosition(onLocationFound, onLocationError, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-        });
-    } else {
-        alert("Geolocation is not supported by your browser.");
-    }
-}
-
-function addLocationButton() {
-    var locationButton = L.control({position: 'topright'});
-    locationButton.onAdd = function() {
-        var div = L.DomUtil.create('div', 'location-button');
-        div.innerHTML = '<button title="Mi localización" aria-label="Mi localización"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>MI LOCALIZACIÓN</button>';
-        div.style.cssText = 'background: blue; padding: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.8); margin: 10px; z-index: 1000;';
-        div.querySelector('button').style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; color: white; font-weight: bold; width: auto; height: 40px; border: none; background: none; cursor: pointer; border-radius: 2px; font-size: 14px;';
-        div.querySelector('svg').style.cssText = 'width: 22px; height: 22px; fill: white;';
-        
-        div.onclick = function() {
-            startLocationTracking();
-        };
-        return div;
-    };
-    locationButton.addTo(map);
-}
 </script> 
     <!-- Incluir Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
