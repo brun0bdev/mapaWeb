@@ -299,7 +299,7 @@ function addLocationButton() {
         
         // Función para mostrar/ocultar mensaje de zoom
         function updateZoomMessage(zoomLevel) {
-            if (zoomLevel >= 16) {
+            if (zoomLevel >= 19) {
                 zoomMessage.style.opacity = '0';
             } else {
                 zoomMessage.style.opacity = '1';
@@ -367,8 +367,7 @@ function addLocationButton() {
             const currentZoom = map.getZoom();
             updateZoomMessage(currentZoom);
             
-            // No mostrar portales si el zoom es menor a 17
-            if (currentZoom < 16) {
+            if (currentZoom < 19) {
                 return;
             }
             
